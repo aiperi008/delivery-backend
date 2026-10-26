@@ -68,3 +68,17 @@ class AnswerOutputSchema(BaseModel):
     text_draft: str
     review: bool = True
 
+
+
+class AIOrderInputSchema(BaseModel):
+    text: str = Field(..., json_schema_extra={"example": "Салам! Хочу заказать свитер размером L"})
+
+
+class AIOrderOutputSchema(BaseModel):
+    title: str
+    category: str
+    price: int
+    quantity: int
+    total_price: int
+    description: str
+

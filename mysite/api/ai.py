@@ -1,24 +1,38 @@
 import asyncio
+
 from fastapi import APIRouter, HTTPException
-from mysite.database.schemas import TicketInputSchema, TicketOutputSchema, AnswerInputSchema, AnswerOutputSchema
 from langchain_core.exceptions import OutputParserException
 
+from mysite.database.schemas import (
+    TicketInputSchema,
+    TicketOutputSchema,
+    AnswerInputSchema,
+    AnswerOutputSchema,
+)
+from mysite.chain.ticket_chain import ticket_chain, answer_chain
 ai_router = APIRouter(prefix='/ai', tags=['AI Assistant'])
+
+MODEL_TIMEOUT = 120
 
 
 @ai_router.post('/analyze', response_model=TicketOutputSchema)
-async def analyze_ticke(ticket: TicketInputSchema):
+async def analyze_ticket(ticket: TicketInputSchema):
     text = ticket.text.strip()
 
     if not text:
         raise HTTPException(status_code=422, detail='Маалымат туура эмес форматта берилген')
 
     try:
-        result = {}
-    except TimeoutError:
-        raise HTTPException(status_code=500, detail='Модель тапшырманы аткарганы текшерген жок')
+        result = await asyncio.wait_for(
+            ticket_chain.ainvoke({"text": text}),
+            timeout=MODEL_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail='Модель убагында жооп берген жок')
     except OutputParserException:
         raise HTTPException(status_code=422, detail='Моделдин жообу схемага туура келбейт')
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Моделге кошулууда ката: {e}')
 
     return result
 
@@ -32,10 +46,15 @@ async def answer_list(answer: AnswerInputSchema):
         raise HTTPException(status_code=422, detail='Маалымат туура эмес форматта берилген')
 
     try:
-        result = "Жооп текстин жазыңыз"
-    except TimeoutError:
-        raise HTTPException(status_code=500, detail='Модель тапшырманы аткарганы текшерген жок')
+        result = await asyncio.wait_for(
+            answer_chain.ainvoke({"text": text, "facts": facts}),
+            timeout=MODEL_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail='Модель убагында жооп берген жок')
     except OutputParserException:
         raise HTTPException(status_code=422, detail='Моделдин жообу схемага туура келбейт')
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Моделге кошулууда ката: {e}')
 
     return AnswerOutputSchema(text_draft=result)
